@@ -1,0 +1,21 @@
+name: Large File Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump
+        run: |
+          mkdir artifact
+          dd if=/dev/urandom of=artifact/large.file bs=1M count=2048
+      - name: Upload
+        uses: actions/upload-artifact@v2
+        with:
+          name: large_artifact
+          path: artifact
