@@ -1,9 +1,14 @@
 const core = require('@actions/core')
 const github = require('@actions/github')
-const AdmZip = require('adm-zip')
 const filesize = require('filesize')
+const fse = require('fs-extra')
 const pathname = require('path')
-const fs = require('fs')
+const yauzl = require('yauzl')
+
+
+
+
+
 
 async function main() {
     try {
@@ -133,20 +138,46 @@ async function main() {
 
             const dir = name ? path : pathname.join(path, artifact.name)
 
-            fs.mkdirSync(dir, { recursive: true })
+            fse.mkdirs(dir, { recursive: true })
 
-            const adm = new AdmZip(Buffer.from(zip.data))
-
-            adm.getEntries().forEach((entry) => {
-                const action = entry.isDirectory ? "creating" : "inflating"
-                const filepath = pathname.join(dir, entry.entryName)
-
-                console.log(`  ${action}: ${filepath}`)
+            yauzl.fromBuffer(Buffer.from(zip.data), { lazyEntries: true }, function (err, zipfile) {
+                if (err) throw err
+                zipfile.readEntry()
+                zipfile.on('entry', function (entry) {
+                    var filepath = pathname.join(dir, entry.fileName)
+                    if (/\/$|\\$/.test(entry.fileName)) {
+                        // create directories (names ending in '/' or '\')
+                        console.log(`  creating: ${filepath}`)
+                        fse.mkdirs(filepath, function (err) {
+                            if (err) throw err
+                            zipfile.readEntry()
+                        })
+                    }
+                    else {
+                        // write files via streams
+                        console.log(`  inflating: ${filepath}`)
+                        zipfile.openReadStream(entry, function (err, readStream) {
+                            if (err) throw err
+                            // ensure parent directory exists
+                            fse.mkdirs(pathname.dirname(filepath), function (err) {
+                                if (err) throw err
+                                readStream.pipe(fse.createWriteStream(filepath))
+                                readStream.on('end', function () {
+                                    zipfile.readEntry()
+                                })
+                            })
+                        })
+                    }
+                })
+                zipfile.on('end', function (err) {
+                    if (err) throw err
+                })
             })
 
-            adm.extractAllTo(dir, true)
+
         }
     } catch (error) {
+        core.error(error)
         core.setFailed(error.message)
     }
 }
