@@ -67,8 +67,8 @@ async function main() {
                 owner: owner,
                 repo: repo,
                 workflow_id: workflow,
-                branch: branch,
-                event: event,
+                ...(branch ? { branch } : {}),
+                ...(event ? { event } : {}),
             }
             )) {
                 for (const run of runs.data) {
